@@ -35,7 +35,7 @@ with open("news.bt.en-ru.ru", "r", encoding='utf8', errors="ignore") as ru:
 russian = russian[0]
 
 dataset = zip(russian, english)
-dataset = list(dataset)[0:50000]
+dataset = list(dataset)[0:1500000]
 
 
 random.shuffle(dataset)
@@ -263,24 +263,13 @@ transformer = keras.Model([encoder_inputs, decoder_inputs], decoder_outputs, nam
 optimizer = tf.keras.optimizers.RMSprop()
 optimizer = hvd.DistributedOptimizer(optimizer)
 
-# Callbacks
-
-# class PrintTotalTime(tf.keras.callbacks.Callback):
-#     def on_train_begin(self, logs=None):
-#         self.start_time = time()
-
-#     def on_train_end(self, logs=None):
-#         total_time = round(time() - self.start_time, 2)
-#         print("\nCumulative training time: {}".format(total_time))
-
 
 cb = []
 cb.append(hvd.callbacks.LearningRateScheduleCallback(initial_lr=0.0002 * hvd.size(), multiplier=0.0003 * hvd.size(), start_epoch=15, staircase=True, steps_per_epoch=4))
 cb.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
 cb.append(hvd.callbacks.MetricAverageCallback())
-#cb.append(PrintTotalTime())
 if hvd.rank() == 0:
-    cb.append(tf.keras.callbacks.ModelCheckpoint('./checkpoint-{epoch}.h5'))
+    cb.append(tf.keras.callbacks.ModelCheckpoint('./ck.hdf5', save_freq=1, save_weights_only=False))
 
 
     
@@ -288,4 +277,4 @@ epochs = 25  # This should be at least 30 for convergence
 
 transformer.summary()
 transformer.compile(optimizer, loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, steps_per_epoch=500 // hvd.size(), verbose=1, workers=1)
+transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, verbose=1, workers=1)
