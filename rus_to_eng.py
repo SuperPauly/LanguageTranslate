@@ -1,4 +1,4 @@
-#from keras import callbacks
+#wget https://data.statmt.org/rsennrich/wmt16_backtranslations/en-ru/news.bt.en-ru.en.gz && wget https://data.statmt.org/rsennrich/wmt16_backtranslations/en-ru/news.bt.en-ru.ru.gz && gzip -vdf news.bt.en-ru.en.gz && gzip -vdf news.bt.en-ru.ru.gz
 import pathlib
 import random
 import string
