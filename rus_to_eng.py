@@ -17,12 +17,12 @@ hvd.init()
 
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
-print("\n\n\n\n\n\{}\n\n\n\n\n\n".format(gpus))
-tf.config.experimental.set_memory_growth(gpus[hvd.local_rank()], True)
-tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
+if gpus:
+    tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
 
 bs = 32 * hvd.size()
-
 
 russian = []
 english = []
@@ -107,6 +107,20 @@ class TransformerEncoder(layers.Layer):
         self.layernorm_1 = layers.LayerNormalization()
         self.layernorm_2 = layers.LayerNormalization()
         self.supports_masking = True
+    
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'embed_dim': self.embed_dim,
+            'dense_dim': self.dense_dim,
+            'num_heads': self.num_heads,
+            'attention': self.attention,
+            'dense_proj': self.dense_proj,
+            'layernorm_1': self.layernorm_1,
+            'layernorm_2': self.layernorm_2,
+            'supports_masking': self.supports_masking,
+        })
+        return config
 
     def call(self, inputs, mask=None):
         if mask is not None:
@@ -131,6 +145,17 @@ class PositionalEmbedding(layers.Layer):
         self.sequence_length = sequence_length
         self.vocab_size = vocab_size
         self.embed_dim = embed_dim
+    
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'token_embeddings': self.token_embeddings,
+            'position_embeddings': self.position_embeddings,
+            'sequence_length': self.sequence_length,
+            'vocab_size': self.vocab_size,
+            'embed_dim': self.embed_dim,
+        })
+        return config
 
     def call(self, inputs):
         length = tf.shape(inputs)[-1]
@@ -162,6 +187,23 @@ class TransformerDecoder(layers.Layer):
         self.layernorm_2 = layers.LayerNormalization()
         self.layernorm_3 = layers.LayerNormalization()
         self.supports_masking = True
+    
+    def get_config(self):
+
+        config = super().get_config().copy()
+        config.update({
+            'embed_dim': self.embed_dim,
+            'latent_dim': self.latent_dim,
+            'num_heads': self.num_heads,
+            'attention_1': self.attention_1,
+            'attention_2': self.attention_2,
+            'dense_proj': self.dense_proj,
+            'layernorm_1': self.layernorm_1,
+            'layernorm_2': self.layernorm_2,
+            'layernorm_3': self.layernorm_3,
+            'supports_masking': self.supports_masking
+        })
+        return config
 
     def call(self, inputs, encoder_outputs, mask=None):
         causal_mask = self.get_causal_attention_mask(inputs)
@@ -235,9 +277,10 @@ optimizer = hvd.DistributedOptimizer(optimizer)
 cb = []
 cb.append(hvd.callbacks.LearningRateScheduleCallback(initial_lr=0.0002 * hvd.size(), multiplier=0.0003 * hvd.size(), start_epoch=15, staircase=True, steps_per_epoch=4))
 cb.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
-cb.append(hvd.callbacks.BestModelCheckpoint('./checkpoin.h5'))
 cb.append(hvd.callbacks.MetricAverageCallback())
 #cb.append(PrintTotalTime())
+if hvd.rank() == 0:
+    cb.append(tf.keras.callbacks.ModelCheckpoint('./checkpoint-{epoch}.h5'))
 
 
     
@@ -245,4 +288,4 @@ epochs = 25  # This should be at least 30 for convergence
 
 transformer.summary()
 transformer.compile(optimizer, loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, verbose=1, workers=1)
+transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, steps_per_epoch=500 // hvd.size(), verbose=1, workers=1)
