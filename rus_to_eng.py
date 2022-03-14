@@ -22,7 +22,7 @@ for gpu in gpus:
 if gpus:
     tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
 
-bs = 64 * hvd.size()
+bs = 16 * hvd.size()
 
 russian = []
 english = []
@@ -35,7 +35,7 @@ with open("news.bt.en-ru.ru", "r", encoding='utf8', errors="ignore") as ru:
 russian = russian[0]
 
 dataset = zip(russian, english)
-dataset = list(dataset)[0:1500000]
+dataset = list(dataset)[0:50000]
 
 
 random.shuffle(dataset)
@@ -98,12 +98,8 @@ class TransformerEncoder(layers.Layer):
         self.embed_dim = embed_dim
         self.dense_dim = dense_dim
         self.num_heads = num_heads
-        self.attention = layers.MultiHeadAttention(
-            num_heads=num_heads, key_dim=embed_dim
-        )
-        self.dense_proj = keras.Sequential(
-            [layers.Dense(dense_dim, activation="relu"), layers.Dense(embed_dim),]
-        )
+        self.attention = layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
+        self.dense_proj = keras.Sequential([layers.Dense(dense_dim, activation="relu"), layers.Dense(embed_dim),])
         self.layernorm_1 = layers.LayerNormalization()
         self.layernorm_2 = layers.LayerNormalization()
         self.supports_masking = True
@@ -136,12 +132,8 @@ class TransformerEncoder(layers.Layer):
 class PositionalEmbedding(layers.Layer):
     def __init__(self, sequence_length, vocab_size, embed_dim, **kwargs):
         super(PositionalEmbedding, self).__init__(**kwargs)
-        self.token_embeddings = layers.Embedding(
-            input_dim=vocab_size, output_dim=embed_dim
-        )
-        self.position_embeddings = layers.Embedding(
-            input_dim=sequence_length, output_dim=embed_dim
-        )
+        self.token_embeddings = layers.Embedding(input_dim=vocab_size, output_dim=embed_dim)
+        self.position_embeddings = layers.Embedding(input_dim=sequence_length, output_dim=embed_dim)
         self.sequence_length = sequence_length
         self.vocab_size = vocab_size
         self.embed_dim = embed_dim
@@ -174,15 +166,9 @@ class TransformerDecoder(layers.Layer):
         self.embed_dim = embed_dim
         self.latent_dim = latent_dim
         self.num_heads = num_heads
-        self.attention_1 = layers.MultiHeadAttention(
-            num_heads=num_heads, key_dim=embed_dim
-        )
-        self.attention_2 = layers.MultiHeadAttention(
-            num_heads=num_heads, key_dim=embed_dim
-        )
-        self.dense_proj = keras.Sequential(
-            [layers.Dense(latent_dim, activation="relu"), layers.Dense(embed_dim),]
-        )
+        self.attention_1 = layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
+        self.attention_2 = layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
+        self.dense_proj = keras.Sequential([layers.Dense(latent_dim, activation="relu"), layers.Dense(embed_dim),])
         self.layernorm_1 = layers.LayerNormalization()
         self.layernorm_2 = layers.LayerNormalization()
         self.layernorm_3 = layers.LayerNormalization()
@@ -269,12 +255,19 @@ cb.append(hvd.callbacks.LearningRateScheduleCallback(initial_lr=0.0002 * hvd.siz
 cb.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
 cb.append(hvd.callbacks.MetricAverageCallback())
 if hvd.rank() == 0:
-    cb.append(tf.keras.callbacks.ModelCheckpoint('./ck.hdf5', save_freq=1, save_weights_only=False))
+    cb.append(tf.keras.callbacks.ModelCheckpoint('./Epoch-{epoch:02d}VallLoss-{val_loss:.2f}.hdf5', save_freq='epoch', save_weights_only=False))
 
-
-    
 epochs = 25  # This should be at least 30 for convergence
 
-transformer.summary()
-transformer.compile(optimizer, loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, verbose=1, workers=1)
+    
+def load_model(path: str):
+    new_model = hvd.load_model(path)
+    new_model.fit_generator(train_ds)
+    
+
+
+load_model("01-1.92.hdf5")
+
+# transformer.summary()
+# transformer.compile(optimizer, loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+# transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, verbose=1, workers=1)
