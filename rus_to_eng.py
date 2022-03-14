@@ -22,7 +22,7 @@ for gpu in gpus:
 if gpus:
     tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
 
-bs = 32 * hvd.size()
+bs = 64 * hvd.size()
 
 russian = []
 english = []
@@ -79,7 +79,7 @@ def make_dataset(pairs):
     dataset = tf.data.Dataset.from_tensor_slices((eng_texts, rus_texts))
     dataset = dataset.batch(batch_size)
     dataset = dataset.map(format_dataset)
-    return dataset.shuffle(50000, reshuffle_each_iteration=True).prefetch(5000).cache()
+    return dataset.shuffle(500000, reshuffle_each_iteration=True).prefetch(50000).cache()
 
 
 train_ds = make_dataset(train_pairs)
