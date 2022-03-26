@@ -79,7 +79,7 @@ def make_dataset(pairs):
     dataset = tf.data.Dataset.from_tensor_slices((eng_texts, rus_texts))
     dataset = dataset.batch(batch_size)
     dataset = dataset.map(format_dataset)
-    return dataset.shuffle(500000, reshuffle_each_iteration=True).prefetch(50000).cache()
+    return dataset.shuffle(reshuffle_each_iteration=True).prefetch(50000).cache()
 
 
 train_ds = make_dataset(train_pairs)
@@ -257,7 +257,7 @@ cb = []
 cb.append(hvd.callbacks.LearningRateScheduleCallback(initial_lr=0.0002 * hvd.size(), multiplier=0.0003 * hvd.size(), start_epoch=15, staircase=True, steps_per_epoch=4))
 cb.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
 cb.append(hvd.callbacks.MetricAverageCallback())
-if hvd.rank() == 0: # Saves only from 1 card
+if hvd.rank() == 0: # Saves only from 1 GFX card and in this case it is GFX card number #0
     cb.append(tf.keras.callbacks.ModelCheckpoint('./Epoch-{epoch:02d}-VallLoss-{val_loss:.2f}.hdf5', save_freq='epoch', save_weights_only=True))
 
 epochs = 25  # This should be at least 30 for convergence
@@ -265,11 +265,11 @@ epochs = 25  # This should be at least 30 for convergence
 
 transformer.summary()
 transformer.compile(optimizer, loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-# The line below starts off the trainning, So basically the first epoch onwards.
-# transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, verbose=1, workers=4)
-
-
-# These lines carry on trainning from saved weight from the above line
-transformer.load_weights("./Epoch-07-VallLoss-1.99.hdf5")
+        #### The line below starts off the trainning, So basically the first epoch onwards. ####
 transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, verbose=1, workers=4)
+
+
+        #### These lines carry on trainning from saved weight from the above line ####
+#transformer.load_weights("./Epoch-07-VallLoss-1.99.hdf5")
+#transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, verbose=1, workers=4)
 
