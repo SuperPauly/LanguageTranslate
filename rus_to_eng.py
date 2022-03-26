@@ -35,7 +35,7 @@ with open("news.bt.en-ru.ru", "r", encoding='utf8', errors="ignore") as ru:
 russian = russian[0]
 
 dataset = zip(russian, english)
-dataset = list(dataset)[0:50000]
+dataset = list(dataset)
 
 
 random.shuffle(dataset)
@@ -225,6 +225,9 @@ class TransformerDecoder(layers.Layer):
             axis=0,
         )
         return tf.tile(mask, mult)
+    
+def getEpochFromFilename(filename):
+    return int(filename.split("-")[1])
 
 embed_dim = 256
 latent_dim = 2048
@@ -246,7 +249,7 @@ decoder = keras.Model([decoder_inputs, encoded_seq_inputs], decoder_outputs)
 decoder_outputs = decoder([decoder_inputs, encoder_outputs])
 transformer = keras.Model([encoder_inputs, decoder_inputs], decoder_outputs, name="transformer")
 
-optimizer = tf.keras.optimizers.RMSprop()
+optimizer = tf.keras.optimizers.SGD()
 optimizer = hvd.DistributedOptimizer(optimizer)
 
 
@@ -254,20 +257,19 @@ cb = []
 cb.append(hvd.callbacks.LearningRateScheduleCallback(initial_lr=0.0002 * hvd.size(), multiplier=0.0003 * hvd.size(), start_epoch=15, staircase=True, steps_per_epoch=4))
 cb.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
 cb.append(hvd.callbacks.MetricAverageCallback())
-if hvd.rank() == 0:
-    cb.append(tf.keras.callbacks.ModelCheckpoint('./Epoch-{epoch:02d}VallLoss-{val_loss:.2f}.hdf5', save_freq='epoch', save_weights_only=False))
+if hvd.rank() == 0: # Saves only from 1 card
+    cb.append(tf.keras.callbacks.ModelCheckpoint('./Epoch-{epoch:02d}-VallLoss-{val_loss:.2f}.hdf5', save_freq='epoch', save_weights_only=True))
 
 epochs = 25  # This should be at least 30 for convergence
-
-    
-def load_model(path: str):
-    new_model = hvd.load_model(path)
-    new_model.fit_generator(train_ds)
     
 
+transformer.summary()
+transformer.compile(optimizer, loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+# The line below starts off the trainning, So basically the first epoch onwards.
+# transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, verbose=1, workers=4)
 
-load_model("01-1.92.hdf5")
 
-# transformer.summary()
-# transformer.compile(optimizer, loss="sparse_categorical_crossentropy", metrics=["accuracy"])
-# transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, verbose=1, workers=1)
+# These lines carry on trainning from saved weight from the above line
+transformer.load_weights("./Epoch-07-VallLoss-1.99.hdf5")
+transformer.fit(train_ds, epochs=epochs, shuffle=True, validation_data=val_ds, validation_steps=len(val_ds), callbacks=cb, verbose=1, workers=4)
+
