@@ -249,7 +249,7 @@ decoder = keras.Model([decoder_inputs, encoded_seq_inputs], decoder_outputs)
 decoder_outputs = decoder([decoder_inputs, encoder_outputs])
 transformer = keras.Model([encoder_inputs, decoder_inputs], decoder_outputs, name="transformer")
 
-optimizer = tf.keras.optimizers.SGD()
+optimizer = tf.keras.optimizers.RMSprop()
 optimizer = hvd.DistributedOptimizer(optimizer)
 
 
