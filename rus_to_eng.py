@@ -51,7 +51,7 @@ print(f"{len(train_pairs)} training pairs")
 print(f"{len(val_pairs)} validation pairs")
 print(f"{len(test_pairs)} test pairs")
 
-vocab_size = 15000
+vocab_size = 25000
 sequence_length = 50
 batch_size = bs
 eng_vectorization = TextVectorization(
@@ -79,7 +79,7 @@ def make_dataset(pairs):
     dataset = tf.data.Dataset.from_tensor_slices((eng_texts, rus_texts))
     dataset = dataset.batch(batch_size)
     dataset = dataset.map(format_dataset)
-    return dataset.shuffle(reshuffle_each_iteration=True).prefetch(50000).cache()
+    return dataset.shuffle(buffer_size=256, reshuffle_each_iteration=True).prefetch(64).cache()
 
 
 train_ds = make_dataset(train_pairs)
